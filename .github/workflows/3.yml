@@ -6,15 +6,6 @@ on:
         description: "分支"
         required: true
         default: 'sm8750'
-      FEIL:
-        type: choice
-        description: "配置文件"
-        required: true
-        default: 'oneplus_13'
-        options:
-          - oneplus_13
-          - oneplus_ace5_pro
-          - oneplus_13t
       CPUD:
         description: "处理器代号"
         required: true
@@ -42,6 +33,10 @@ on:
 
 jobs:
   build:
+    strategy:
+      matrix:
+        FEIL: ["oneplus_13", "oneplus_ace5_pro", "oneplus_13t"]
+            
     runs-on: ${{ github.event.inputs.BUILD_RUN }}
     env:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
@@ -82,7 +77,7 @@ jobs:
       - name: Initialize repo and sync
         run: |
          mkdir kernel_workspace && cd kernel_workspace
-         repo init -u https://github.com/JiuGeFaCai/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ github.event.inputs.FEIL }}.xml --depth=1
+         repo init -u https://github.com/JiuGeFaCai/kernel_manifest.git -b refs/heads/oneplus/${{ github.event.inputs.CPU }} -m ${{ matrix.FEIL }}.xml --depth=1
          repo --trace sync -c -j$(nproc --all) --no-tags
          rm kernel_platform/common/android/abi_gki_protected_exports_* || echo "No protected exports!"
          rm kernel_platform/msm-kernel/android/abi_gki_protected_exports_* || echo "No protected exports!"
@@ -93,9 +88,10 @@ jobs:
          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-dev
          cd ./KernelSU
          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count main) "+" 10606)
-         echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
+         echo "KSUVER=${KSU_VERSION}_${{ matrix.FEIL }}" >> $GITHUB_ENV
          export KSU_VERSION=$KSU_VERSION
          sed -i "s/DKSU_VERSION=12800/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
+         
         
       - name: Set up susfs
         run: |
@@ -116,7 +112,7 @@ jobs:
            cp ../sturdy-journey/fix.patch ./common/
            cd ./common
 
-           if [ "${{ github.event.inputs.FEIL }}" != "oneplus_13t" ]; then
+           if [ "${{ matrix.FEIL }}" != "oneplus_13t" ]; then
            sed -i 's/-32,12 +32,38/-32,11 +32,37/g' 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch
            sed -i '/#include <trace\/hooks\/fs.h>/d' 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch
            fi
@@ -187,7 +183,7 @@ jobs:
       - name: Set build timestamp
         run: |         
          export SOURCE_DATE_EPOCH=$(date -d "2024-12-17 23:36:49 UTC" +%s)
-         if [ "${{ github.event.inputs.FEIL }}" = "oneplus_13t" ]; then
+         if [ "${{ matrix.FEIL }}" = "oneplus_13t" ]; then
          export SOURCE_DATE_EPOCH=$(date -d "2025-1-20 03:24:58 UTC" +%s)
          fi
          echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" >> $GITHUB_ENV
@@ -216,11 +212,11 @@ jobs:
       - name: Upload AnyKernel3
         uses: actions/upload-artifact@v4
         with:
-         name: SuKiSu_${{ env.KSUVER }}_${{ github.event.inputs.FEIL }}
+         name: SuKiSu_${{ env.KSUVER }}
          path: ./AnyKernel3/*
          
       - name: Upload Image
         uses: actions/upload-artifact@v4
         with:
-         name: Image_SuKiSu_${{ env.KSUVER }}_${{ github.event.inputs.FEIL }}
+         name: Image_SuKiSu_${{ env.KSUVER }}
          path: kernel_workspace/kernel_platform/dist/Image
